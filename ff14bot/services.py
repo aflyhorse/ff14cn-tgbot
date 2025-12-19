@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import hashlib
 from typing import Iterable, List, Optional, Tuple
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from .models import Event, EventDelivery, Subscriber
@@ -52,8 +52,11 @@ def sync_events(
 ) -> Tuple[List[Event], List[Event]]:
     created: List[Event] = []
     updated: List[Event] = []
+    now = _utcnow()
+    seen_source_ids: List[str] = []
     for scraped in scraped_events:
         sid = _source_id(scraped)
+        seen_source_ids.append(sid)
         event = session.execute(
             select(Event).where(Event.source_id == sid)
         ).scalar_one_or_none()
@@ -64,6 +67,9 @@ def sync_events(
             event.image_url = scraped.image_url
             event.start_at = scraped.start_at
             event.end_at = scraped.end_at
+            event.is_active = True
+            event.last_seen_at = now
+            event.removed_at = None
             updated.append(event)
         else:
             event = Event(
@@ -74,9 +80,20 @@ def sync_events(
                 image_url=scraped.image_url,
                 start_at=scraped.start_at,
                 end_at=scraped.end_at,
+                is_active=True,
+                last_seen_at=now,
+                removed_at=None,
             )
             session.add(event)
             created.append(event)
+
+    # Anything no longer present on the source page is marked inactive.
+    if seen_source_ids:
+        session.execute(
+            update(Event)
+            .where(Event.is_active.is_(True), Event.source_id.not_in(seen_source_ids))
+            .values(is_active=False, removed_at=now)
+        )
     return created, updated
 
 
@@ -102,6 +119,7 @@ def list_current_events(session: Session) -> List[Event]:
     now = _utcnow()
     stmt = (
         select(Event)
+        .where(Event.is_active.is_(True))
         .where(or_(Event.end_at.is_(None), Event.end_at >= now))
         .order_by(Event.start_at.is_(None), Event.start_at, Event.created_at.desc())
     )
@@ -115,6 +133,7 @@ def pending_reminders(session: Session, within_days: int = 3) -> List[EventDeliv
         select(EventDelivery)
         .join(Event)
         .where(
+            Event.is_active.is_(True),
             Event.end_at.is_not(None),
             Event.end_at <= deadline,
             Event.end_at >= now,

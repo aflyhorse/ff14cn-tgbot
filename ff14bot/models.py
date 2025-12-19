@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Boolean,
     String,
     UniqueConstraint,
     func,
@@ -43,6 +44,14 @@ class Event(Base):
     image_url: Mapped[Optional[str]] = mapped_column(String(500))
     start_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     end_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+    # Lifecycle:
+    # - is_active: whether it is still present on the source page.
+    # - last_seen_at: last time it was observed during scan.
+    # - removed_at: when it disappeared from the source page.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    removed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=func.now(), nullable=False
     )

@@ -18,6 +18,21 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
 
+    # Lightweight SQLite migration for additive columns.
+    # Keeps existing installations working without manual ALTER TABLE.
+    with engine.begin() as conn:
+        rows = conn.exec_driver_sql("PRAGMA table_info(events)").fetchall()
+        cols = {r[1] for r in rows}  # (cid, name, type, notnull, dflt_value, pk)
+
+        if "is_active" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE events ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1"
+            )
+        if "last_seen_at" not in cols:
+            conn.exec_driver_sql("ALTER TABLE events ADD COLUMN last_seen_at DATETIME")
+        if "removed_at" not in cols:
+            conn.exec_driver_sql("ALTER TABLE events ADD COLUMN removed_at DATETIME")
+
 
 @contextmanager
 def session_scope():

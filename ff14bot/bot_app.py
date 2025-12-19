@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import List
 
 from telegram import Update
@@ -25,6 +26,11 @@ from .services import (
 
 
 logger = logging.getLogger(__name__)
+
+
+async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # python-telegram-bot awaits error handlers; this must be async.
+    logger.exception("Unhandled error", exc_info=context.error)
 
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -72,7 +78,11 @@ async def handle_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         for delivery in deliveries:
             try:
                 await send_event_to_subscriber(
-                    context.bot, delivery.subscriber, delivery.event, delivery
+                    context.bot,
+                    delivery.subscriber,
+                    delivery.event,
+                    delivery,
+                    tag="活动",
                 )
             except Exception:
                 logger.exception(
@@ -81,6 +91,54 @@ async def handle_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                     subscriber.chat_id,
                 )
                 # Continue with next delivery
+                continue
+
+
+async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.effective_chat or not update.message:
+        return
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    await update.message.reply_text(f"Bot is running. Current server time: {now}")
+
+
+async def handle_incomplete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.effective_chat:
+        return
+    user = update.effective_user
+    with session_scope() as session:
+        subscriber = ensure_subscriber(
+            session,
+            chat_id=update.effective_chat.id,
+            username=user.username if user else None,
+            first_name=user.first_name if user else None,
+            last_name=user.last_name if user else None,
+        )
+        events = list_current_events(session)
+        deliveries: List[EventDelivery] = []
+        for event in events:
+            deliveries.extend(ensure_deliveries(session, event, [subscriber]))
+
+        deliveries = [d for d in deliveries if not d.is_confirmed]
+        if not deliveries:
+            await update.message.reply_text("当前没有未完成的活动。")
+            return
+
+        session.commit()
+        for delivery in deliveries:
+            try:
+                await send_event_to_subscriber(
+                    context.bot,
+                    delivery.subscriber,
+                    delivery.event,
+                    delivery,
+                    tag="未完成",
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to send /incomplete event_id=%s to chat_id=%s",
+                    delivery.event_id,
+                    subscriber.chat_id,
+                )
                 continue
 
 
@@ -130,8 +188,8 @@ def build_application(settings: Settings) -> Application:
         application = ApplicationBuilder().token(settings.telegram_token).build()
     application.add_handler(CommandHandler("start", handle_start))
     application.add_handler(CommandHandler("list", handle_list))
+    application.add_handler(CommandHandler("status", handle_status))
+    application.add_handler(CommandHandler("incomplete", handle_incomplete))
     application.add_handler(CallbackQueryHandler(handle_confirm, pattern=r"^confirm:"))
-    application.add_error_handler(
-        lambda _update, ctx: logger.exception("Unhandled error", exc_info=ctx.error)
-    )
+    application.add_error_handler(handle_error)
     return application

@@ -42,7 +42,9 @@ python main.py countdown --within-days 3
 
 - `/start` subscribe the current chat to updates
 - `/list` send all current events
-- Inline button "确认参加" under each event marks it as confirmed and suppresses countdown reminders
+- `/status` show bot health and server time
+- `/incomplete` list current events that you haven't marked done
+- Inline button "Done! ⭐" under each event marks it as confirmed and suppresses countdown reminders
 
 ## Data model (SQLite)
 
@@ -52,5 +54,5 @@ python main.py countdown --within-days 3
 
 ## Notes
 
-- Scraper searches for nodes containing "活动时间" on the source page and extracts nearby title/image/link heuristically.
+- Scraper uses the page's backing JSON API and currently fetches only the "活动节庆" category.
 - Only events with parsed `end_at` can be included in countdown reminders; others remain in `/list` results.

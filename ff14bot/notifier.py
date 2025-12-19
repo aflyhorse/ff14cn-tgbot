@@ -12,12 +12,17 @@ def _build_keyboard(event_id: int, confirmed: bool) -> Optional[InlineKeyboardMa
     if confirmed:
         return None
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton(text="确认参加", callback_data=f"confirm:{event_id}")]]
+        [[InlineKeyboardButton(text="Done! ⭐", callback_data=f"confirm:{event_id}")]]
     )
 
 
-def render_event_text(event: Event, is_reminder: bool = False) -> str:
-    prefix = "【活动提醒】" if is_reminder else "【新活动】"
+def render_event_text(
+    event: Event, is_reminder: bool = False, tag: Optional[str] = None
+) -> str:
+    if tag:
+        prefix = f"【{tag}】"
+    else:
+        prefix = "【活动提醒】" if is_reminder else "【新活动】"
     lines = [f"{prefix}{event.title}"]
     if event.time_text:
         # Only label as 时间 if we actually parsed a time range.
@@ -38,8 +43,9 @@ async def send_event_to_subscriber(
     event: Event,
     delivery: EventDelivery,
     is_reminder: bool = False,
+    tag: Optional[str] = None,
 ) -> None:
-    text = render_event_text(event, is_reminder=is_reminder)
+    text = render_event_text(event, is_reminder=is_reminder, tag=tag)
     keyboard = _build_keyboard(event.id, delivery.is_confirmed)
     if event.image_url:
         await bot.send_photo(
