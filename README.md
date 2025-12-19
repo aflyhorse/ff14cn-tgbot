@@ -26,7 +26,7 @@ uv pip install -r requirements.txt
 python main.py bot
 ```
 
-- Cron: scrape and push new events
+- Cron: scrape and push new events, then send reminders for events ending within 3 days
 
 ```bash
 python main.py scan

@@ -50,6 +50,8 @@ async def run_scan() -> None:
                 await send_event_to_subscriber(
                     bot, delivery.subscriber, delivery.event, delivery
                 )
+    # After new event notifications, trigger countdown reminders
+    await run_countdown(within_days=3)
     logger.info("Scan completed and notifications sent")
 
 
