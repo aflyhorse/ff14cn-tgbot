@@ -1,6 +1,8 @@
+import logging
 from typing import List
 
 from telegram import Update
+from telegram.request import HTTPXRequest
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -20,6 +22,9 @@ from .services import (
     list_current_events,
     mark_confirmed,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -44,7 +49,6 @@ async def handle_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not update.effective_chat:
         return
     user = update.effective_user
-    deliveries: List[EventDelivery] = []
     with session_scope() as session:
         subscriber = ensure_subscriber(
             session,
@@ -54,15 +58,30 @@ async def handle_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             last_name=user.last_name if user else None,
         )
         events = list_current_events(session)
+        deliveries: List[EventDelivery] = []
         for event in events:
             deliveries.extend(ensure_deliveries(session, event, [subscriber]))
-    if not deliveries:
-        await update.message.reply_text("当前没有正在进行或即将到来的活动。")
-        return
-    for delivery in deliveries:
-        await send_event_to_subscriber(
-            context.bot, delivery.subscriber, delivery.event, delivery
-        )
+
+        if not deliveries:
+            await update.message.reply_text("当前没有正在进行或即将到来的活动。")
+            return
+
+        # Persist subscription + delivery rows even if sending fails.
+        session.commit()
+
+        for delivery in deliveries:
+            try:
+                await send_event_to_subscriber(
+                    context.bot, delivery.subscriber, delivery.event, delivery
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to send /list event_id=%s to chat_id=%s",
+                    delivery.event_id,
+                    subscriber.chat_id,
+                )
+                # Continue with next delivery
+                continue
 
 
 async def handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -102,8 +121,17 @@ async def handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 def build_application(settings: Settings) -> Application:
     init_db()
-    application = ApplicationBuilder().token(settings.telegram_token).build()
+    if settings.telegram_proxy:
+        request = HTTPXRequest(proxy=settings.telegram_proxy)
+        application = (
+            ApplicationBuilder().token(settings.telegram_token).request(request).build()
+        )
+    else:
+        application = ApplicationBuilder().token(settings.telegram_token).build()
     application.add_handler(CommandHandler("start", handle_start))
     application.add_handler(CommandHandler("list", handle_list))
     application.add_handler(CallbackQueryHandler(handle_confirm, pattern=r"^confirm:"))
+    application.add_error_handler(
+        lambda _update, ctx: logger.exception("Unhandled error", exc_info=ctx.error)
+    )
     return application

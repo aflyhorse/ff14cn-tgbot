@@ -20,7 +20,13 @@ def render_event_text(event: Event, is_reminder: bool = False) -> str:
     prefix = "【活动提醒】" if is_reminder else "【新活动】"
     lines = [f"{prefix}{event.title}"]
     if event.time_text:
-        lines.append(f"活动时间：{event.time_text}")
+        # Only label as 时间 if we actually parsed a time range.
+        label = (
+            "活动时间"
+            if (event.start_at is not None or event.end_at is not None)
+            else "活动信息"
+        )
+        lines.append(f"{label}：{event.time_text}")
     if event.detail_url:
         lines.append(f"详情：{event.detail_url}")
     return "\n".join(lines)

@@ -19,6 +19,7 @@ def _default_db_url() -> str:
 class Settings:
     telegram_token: str
     database_url: str
+    telegram_proxy: str | None = None
     source_url: str = "https://actff1.web.sdo.com/Project/20181018ffactive/index.html"
 
 
@@ -27,4 +28,10 @@ def load_settings() -> Settings:
     if not token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is required")
     db_url = os.getenv("DATABASE_URL", _default_db_url())
-    return Settings(telegram_token=token, database_url=db_url)
+    # Prefer explicit TELEGRAM_PROXY, otherwise fall back to HTTPS_PROXY/HTTP_PROXY
+    proxy = (
+        os.getenv("TELEGRAM_PROXY")
+        or os.getenv("HTTPS_PROXY")
+        or os.getenv("HTTP_PROXY")
+    )
+    return Settings(telegram_token=token, database_url=db_url, telegram_proxy=proxy)

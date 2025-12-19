@@ -5,6 +5,7 @@ import asyncio
 import logging
 
 from telegram import Bot
+from telegram.request import HTTPXRequest
 
 from ff14bot.bot_app import build_application
 from ff14bot.config import load_settings
@@ -28,7 +29,10 @@ logger = logging.getLogger(__name__)
 async def run_scan() -> None:
     settings = load_settings()
     init_db()
-    bot = Bot(settings.telegram_token)
+    request = (
+        HTTPXRequest(proxy=settings.telegram_proxy) if settings.telegram_proxy else None
+    )
+    bot = Bot(settings.telegram_token, request=request)
     with session_scope() as session:
         scraped = scrape_events(settings.source_url)
         logger.info("Scraped %d events", len(scraped))
@@ -52,7 +56,10 @@ async def run_scan() -> None:
 async def run_countdown(within_days: int = 3) -> None:
     settings = load_settings()
     init_db()
-    bot = Bot(settings.telegram_token)
+    request = (
+        HTTPXRequest(proxy=settings.telegram_proxy) if settings.telegram_proxy else None
+    )
+    bot = Bot(settings.telegram_token, request=request)
     with session_scope() as session:
         deliveries = pending_reminders(session, within_days=within_days)
         if not deliveries:

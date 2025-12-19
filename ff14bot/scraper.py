@@ -56,12 +56,12 @@ def _fetch_category(category_code: int, page_size: int = 20) -> List[dict]:
 def scrape_events(page_url: str) -> List[ScrapedEvent]:
     # NOTE: page_url is kept for compatibility, but the actual activity items
     # are fetched from a JSON API (see the ffactive page source).
-    items: List[dict] = []
-    # Category codes used by the page:
-    # 7139/7140/7141 (latest/ongoing/seasonal).
-    # We only treat items with an explicit "活动时间" in Summary as time-bounded activities.
-    for category in (7139, 7140, 7141):
-        items.extend(_fetch_category(category))
+    # The page splits activities into three sections via category codes:
+    # - 7139: 萌新成长
+    # - 7140: 商城补给
+    # - 7141: 活动节庆
+    # User requirement: only fetch 活动节庆.
+    items: List[dict] = _fetch_category(7141)
 
     events: List[ScrapedEvent] = []
     seen = set()
@@ -70,8 +70,9 @@ def scrape_events(page_url: str) -> List[ScrapedEvent]:
         if not title:
             continue
         time_text_raw = _clean_text(str(item.get("Summary") or ""))
-        if "活动时间" not in time_text_raw:
-            continue
+        # Return all entries in 活动节庆.
+        # If the entry doesn't contain an explicit time range, we still keep it;
+        # countdown will only apply when we can parse end_at.
         time_text = (
             _clean_text(re.sub(r"^活动时间[:：]\s*", "", time_text_raw))
             or time_text_raw
