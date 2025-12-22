@@ -33,6 +33,26 @@ def init_db() -> None:
         if "removed_at" not in cols:
             conn.exec_driver_sql("ALTER TABLE events ADD COLUMN removed_at DATETIME")
 
+        # One-time data migration: historically, scraped activity times were stored
+        # as naive China time (UTC+8). The app logic now stores start_at/end_at as
+        # naive UTC for consistent comparisons on UTC servers.
+        # We track completion via PRAGMA user_version to avoid double conversion.
+        try:
+            user_version = conn.exec_driver_sql("PRAGMA user_version").scalar() or 0
+        except Exception:
+            user_version = 0
+
+        if int(user_version) < 1:
+            # Convert only the activity time fields.
+            # NOTE: SQLite datetime() drops microseconds; acceptable for this app.
+            conn.exec_driver_sql(
+                "UPDATE events SET start_at = datetime(start_at, '-8 hours') WHERE start_at IS NOT NULL"
+            )
+            conn.exec_driver_sql(
+                "UPDATE events SET end_at = datetime(end_at, '-8 hours') WHERE end_at IS NOT NULL"
+            )
+            conn.exec_driver_sql("PRAGMA user_version = 1")
+
 
 @contextmanager
 def session_scope():

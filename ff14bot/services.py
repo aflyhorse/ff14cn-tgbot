@@ -1,6 +1,7 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 from typing import Iterable, List, Optional, Sequence, Tuple
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
@@ -11,6 +12,17 @@ from .scraper import ScrapedEvent
 
 def _utcnow() -> datetime:
     return datetime.utcnow()
+
+
+_EVENT_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def _china_day_start_utc(now_utc: datetime) -> datetime:
+    """Return the UTC timestamp (naive) for today's 00:00 in China time (UTC+8)."""
+    aware_utc = now_utc.replace(tzinfo=timezone.utc)
+    local = aware_utc.astimezone(_EVENT_TZ)
+    local_start = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    return local_start.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _source_id(scraped: ScrapedEvent) -> str:
@@ -133,6 +145,7 @@ def pending_reminders(
 ) -> List[EventDelivery]:
     now = _utcnow()
     deadline = now + timedelta(days=within_days)
+    day_start_utc = _china_day_start_utc(now)
     stmt = (
         select(EventDelivery)
         .join(Event)
@@ -142,7 +155,11 @@ def pending_reminders(
             Event.end_at <= deadline,
             Event.end_at >= now,
             EventDelivery.confirmed_at.is_(None),
-            EventDelivery.reminder_sent_at.is_(None),
+            # Repeat reminders until confirmed: send at most once per day.
+            or_(
+                EventDelivery.reminder_sent_at.is_(None),
+                EventDelivery.reminder_sent_at < day_start_utc,
+            ),
         )
     )
     if exclude_source_ids:

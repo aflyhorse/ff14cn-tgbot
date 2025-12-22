@@ -3,7 +3,8 @@
 import argparse
 import asyncio
 import logging
-from datetime import timedelta
+from datetime import timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from telegram import Bot
 from telegram.request import HTTPXRequest
@@ -94,15 +95,19 @@ async def run_countdown(within_days: int = 3, exclude_source_ids=None) -> None:
 
 def run_list() -> None:
     init_db()
+    cst = ZoneInfo("Asia/Shanghai")
     with session_scope() as session:
         events = list_current_events(session)
-        print("id\tend_at(CST)\ttitle")
+        print("id\tend_at(CST)\tend_at(UTC)\ttitle")
         for event in events:
             if event.end_at is None:
-                end_at = "-"
+                end_cst = "-"
+                end_utc = "-"
             else:
-                end_at = event.end_at.strftime("%Y-%m-%d %H:%M")
-            print(f"{event.id}\t{end_at}\t{event.title}")
+                end_utc_dt = event.end_at.replace(tzinfo=timezone.utc)
+                end_cst = end_utc_dt.astimezone(cst).strftime("%Y-%m-%d %H:%M")
+                end_utc = end_utc_dt.strftime("%Y-%m-%d %H:%M")
+            print(f"{event.id}\t{end_cst}\t{end_utc}\t{event.title}")
 
 
 def run_bot() -> None:

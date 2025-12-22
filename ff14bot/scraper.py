@@ -1,11 +1,15 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 from typing import List, Optional, Tuple
 from urllib.parse import urljoin
+from zoneinfo import ZoneInfo
 
 import requests
 from dateutil import parser
+
+
+EVENT_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 @dataclass
@@ -28,7 +32,13 @@ def _parse_time_range(time_text: str) -> Tuple[Optional[datetime], Optional[date
     matches: List[datetime] = []
     for raw in pattern.findall(normalized):
         try:
-            matches.append(parser.parse(raw, fuzzy=True))
+            parsed = parser.parse(raw, fuzzy=True)
+            # The official activity page uses China local time (UTC+8).
+            # We store timestamps as naive UTC in DB for consistent comparisons.
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=EVENT_TIMEZONE)
+            parsed_utc = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+            matches.append(parsed_utc)
         except Exception:
             continue
     start_at = matches[0] if matches else None
