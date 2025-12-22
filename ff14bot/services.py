@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 import hashlib
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
@@ -126,7 +126,11 @@ def list_current_events(session: Session) -> List[Event]:
     return list(session.execute(stmt).scalars())
 
 
-def pending_reminders(session: Session, within_days: int = 3) -> List[EventDelivery]:
+def pending_reminders(
+    session: Session,
+    within_days: int = 3,
+    exclude_source_ids: Optional[Sequence[str]] = None,
+) -> List[EventDelivery]:
     now = _utcnow()
     deadline = now + timedelta(days=within_days)
     stmt = (
@@ -141,6 +145,8 @@ def pending_reminders(session: Session, within_days: int = 3) -> List[EventDeliv
             EventDelivery.reminder_sent_at.is_(None),
         )
     )
+    if exclude_source_ids:
+        stmt = stmt.where(Event.source_id.not_in(list(exclude_source_ids)))
     return list(session.execute(stmt).scalars())
 
 
