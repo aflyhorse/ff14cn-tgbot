@@ -56,7 +56,7 @@ A convenience script `service.sh` is provided to manage the bot as a background 
 ./service.sh status
 ```
 
-The script uses a PID file (`bot.pid`) to track the process and logs output to `logs/bot.log`.
+The script uses a PID file (`bot.pid`) to track the process and logs output to daily log files in `logs/` (e.g., `logs/2026-02-05.log`).
 
 ## Telegram commands
 

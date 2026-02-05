@@ -6,7 +6,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PATH="$SCRIPT_DIR/.venv"
 PID_FILE="$SCRIPT_DIR/bot.pid"
-LOG_FILE="$SCRIPT_DIR/logs/bot.log"
+LOG_FILE="$SCRIPT_DIR/logs/$(date -I).log"
 
 # Function to start the bot
 start() {
@@ -17,7 +17,7 @@ start() {
 
     echo "Starting bot..."
     source "$VENV_PATH/bin/activate"
-    nohup python "$SCRIPT_DIR/main.py" > "$LOG_FILE" 2>&1 &
+    nohup python "$SCRIPT_DIR/main.py" bot &>> "$LOG_FILE" &
     echo $! > "$PID_FILE"
     echo "Bot started with PID: $(cat $PID_FILE)"
 }
