@@ -38,6 +38,26 @@ python main.py scan
 python main.py countdown --within-days 3
 ```
 
+## Management Script
+
+A convenience script `service.sh` is provided to manage the bot as a background service:
+
+```bash
+# Start the bot in background
+./service.sh start
+
+# Stop the bot
+./service.sh stop
+
+# Restart the bot
+./service.sh restart
+
+# Check status
+./service.sh status
+```
+
+The script uses a PID file (`bot.pid`) to track the process and logs output to `logs/bot.log`.
+
 ## Telegram commands
 
 - `/start` subscribe the current chat to updates
