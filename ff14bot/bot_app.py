@@ -16,12 +16,13 @@ from sqlalchemy import select
 from .config import Settings
 from .database import init_db, session_scope
 from .models import EventDelivery, Subscriber
-from .notifier import send_event_to_subscriber
+from .notifier import build_keyboard, send_event_to_subscriber
 from .services import (
     ensure_deliveries,
     ensure_subscriber,
     list_current_events,
     mark_confirmed,
+    mark_unconfirmed,
 )
 
 
@@ -142,13 +143,12 @@ async def handle_incomplete(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 continue
 
 
-async def handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not query or not update.effective_chat:
         return
-    await query.answer()
     data = query.data or ""
-    if not data.startswith("confirm:"):
+    if not data.startswith("toggle:"):
         return
     try:
         event_id = int(data.split(":", 1)[1])
@@ -172,9 +172,16 @@ async def handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if not delivery:
             await query.edit_message_text("未找到对应活动，请稍后再试。")
             return
-        mark_confirmed(delivery)
-    await query.edit_message_reply_markup(None)
-    await query.answer("已确认")
+        if delivery.is_confirmed:
+            mark_unconfirmed(delivery)
+            confirmed = False
+            answer_text = "已撤回完成"
+        else:
+            mark_confirmed(delivery)
+            confirmed = True
+            answer_text = "已完成"
+    await query.edit_message_reply_markup(build_keyboard(event_id, confirmed))
+    await query.answer(answer_text)
 
 
 def build_application(settings: Settings) -> Application:
@@ -190,6 +197,6 @@ def build_application(settings: Settings) -> Application:
     application.add_handler(CommandHandler("list", handle_list))
     application.add_handler(CommandHandler("status", handle_status))
     application.add_handler(CommandHandler("incomplete", handle_incomplete))
-    application.add_handler(CallbackQueryHandler(handle_confirm, pattern=r"^confirm:"))
+    application.add_handler(CallbackQueryHandler(handle_toggle, pattern=r"^toggle:"))
     application.add_error_handler(handle_error)
     return application

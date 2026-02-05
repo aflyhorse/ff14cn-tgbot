@@ -181,3 +181,7 @@ def mark_sent(
 def mark_confirmed(delivery: EventDelivery, when: Optional[datetime] = None) -> None:
     when = when or _utcnow()
     delivery.confirmed_at = when
+
+
+def mark_unconfirmed(delivery: EventDelivery) -> None:
+    delivery.confirmed_at = None

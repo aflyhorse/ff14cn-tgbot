@@ -43,30 +43,29 @@ async def run_scan() -> None:
         created, updated = sync_events(session, scraped)
         if not created:
             logger.info("No new events found (updated=%d)", len(updated))
-            return
+        else:
+            # If a newly detected event is inherently short (e.g. total duration <= 3 days),
+            # the scan-triggered countdown would immediately send a second "活动提醒".
+            # We suppress ONLY the immediate countdown for those events; the normal
+            # scheduled/manual countdown will still remind later if needed.
+            for event in created:
+                if event.start_at is None or event.end_at is None:
+                    continue
+                if event.end_at <= event.start_at:
+                    continue
+                if (event.end_at - event.start_at) <= timedelta(days=3):
+                    suppressed_source_ids.add(event.source_id)
 
-        # If a newly detected event is inherently short (e.g. total duration <= 3 days),
-        # the scan-triggered countdown would immediately send a second "活动提醒".
-        # We suppress ONLY the immediate countdown for those events; the normal
-        # scheduled/manual countdown will still remind later if needed.
-        for event in created:
-            if event.start_at is None or event.end_at is None:
-                continue
-            if event.end_at <= event.start_at:
-                continue
-            if (event.end_at - event.start_at) <= timedelta(days=3):
-                suppressed_source_ids.add(event.source_id)
-
-        subscribers = list_subscribers(session)
-        if not subscribers:
-            logger.info("No subscribers yet, skipping notifications")
-            return
-        for event in created:
-            deliveries = ensure_deliveries(session, event, subscribers)
-            for delivery in deliveries:
-                await send_event_to_subscriber(
-                    bot, delivery.subscriber, delivery.event, delivery
-                )
+            subscribers = list_subscribers(session)
+            if not subscribers:
+                logger.info("No subscribers yet, skipping notifications")
+            else:
+                for event in created:
+                    deliveries = ensure_deliveries(session, event, subscribers)
+                    for delivery in deliveries:
+                        await send_event_to_subscriber(
+                            bot, delivery.subscriber, delivery.event, delivery
+                        )
     # After new event notifications, trigger countdown reminders
     await run_countdown(within_days=3, exclude_source_ids=sorted(suppressed_source_ids))
     logger.info("Scan completed and notifications sent")

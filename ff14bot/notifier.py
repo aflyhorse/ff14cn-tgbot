@@ -8,11 +8,13 @@ from .models import Event, EventDelivery, Subscriber
 from .services import mark_sent
 
 
-def _build_keyboard(event_id: int, confirmed: bool) -> Optional[InlineKeyboardMarkup]:
+def build_keyboard(event_id: int, confirmed: bool) -> InlineKeyboardMarkup:
     if confirmed:
-        return None
+        text = "已完成 ✅（点击撤回）"
+    else:
+        text = "完成！⭐"
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton(text="Done! ⭐", callback_data=f"confirm:{event_id}")]]
+        [[InlineKeyboardButton(text=text, callback_data=f"toggle:{event_id}")]]
     )
 
 
@@ -46,7 +48,7 @@ async def send_event_to_subscriber(
     tag: Optional[str] = None,
 ) -> None:
     text = render_event_text(event, is_reminder=is_reminder, tag=tag)
-    keyboard = _build_keyboard(event.id, delivery.is_confirmed)
+    keyboard = build_keyboard(event.id, delivery.is_confirmed)
     if event.image_url:
         await bot.send_photo(
             chat_id=subscriber.chat_id,
