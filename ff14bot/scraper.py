@@ -26,17 +26,56 @@ def _clean_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+_TIME_TOKEN_RE = re.compile(
+    r"(?:(?P<year>20\d{2})[年/-])?"
+    r"(?P<month>\d{1,2})[月/-](?P<day>\d{1,2})日?\s*"
+    r"(?:(?P<hour>\d{1,2})(?::(?P<minute>\d{1,2}))?)?"
+)
+
+
+def _build_local_datetime(
+    match: re.Match[str], previous_local: Optional[datetime]
+) -> Optional[datetime]:
+    year_text = match.group("year")
+    month = int(match.group("month"))
+    day = int(match.group("day"))
+    hour = int(match.group("hour") or 0)
+    minute = int(match.group("minute") or 0)
+
+    if year_text:
+        year = int(year_text)
+    elif previous_local is not None:
+        year = previous_local.year
+    else:
+        year = datetime.now(EVENT_TIMEZONE).year
+
+    try:
+        local_dt = datetime(year, month, day, hour, minute, tzinfo=EVENT_TIMEZONE)
+    except ValueError:
+        return None
+
+    if year_text is None and previous_local is not None and local_dt < previous_local:
+        try:
+            local_dt = local_dt.replace(year=local_dt.year + 1)
+        except ValueError:
+            return None
+
+    return local_dt
+
+
 def _parse_time_range(time_text: str) -> Tuple[Optional[datetime], Optional[datetime]]:
     normalized = time_text.replace("～", "~").replace("—", "-")
-    pattern = re.compile(r"20\d{2}[年-]\d{1,2}[月-]\d{1,2}[日\s]*\d{0,2}:?\d{0,2}")
     matches: List[datetime] = []
-    for raw in pattern.findall(normalized):
+    previous_local: Optional[datetime] = None
+    for token in _TIME_TOKEN_RE.finditer(normalized):
         try:
-            parsed = parser.parse(raw, fuzzy=True)
-            # The official activity page uses China local time (UTC+8).
-            # We store timestamps as naive UTC in DB for consistent comparisons.
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=EVENT_TIMEZONE)
+            parsed = _build_local_datetime(token, previous_local)
+            if parsed is None:
+                raw = token.group(0)
+                parsed = parser.parse(raw, fuzzy=True)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=EVENT_TIMEZONE)
+            previous_local = parsed
             parsed_utc = parsed.astimezone(timezone.utc).replace(tzinfo=None)
             matches.append(parsed_utc)
         except Exception:
