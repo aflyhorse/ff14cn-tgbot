@@ -23,9 +23,16 @@ from ff14bot.services import (
 )
 
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
-)
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+    )
+    # Suppress routine Telegram polling HTTP logs while keeping warnings/errors.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
+configure_logging()
 logger = logging.getLogger(__name__)
 
 
