@@ -12,7 +12,7 @@ from telegram.request import HTTPXRequest
 from ff14bot.bot_app import build_application
 from ff14bot.config import load_settings
 from ff14bot.database import init_db, session_scope
-from ff14bot.notifier import send_event_to_subscriber
+from ff14bot.notifier import BlockedByUserError, send_event_to_subscriber
 from ff14bot.scraper import scrape_events
 from ff14bot.services import (
     ensure_deliveries,
@@ -20,6 +20,7 @@ from ff14bot.services import (
     list_subscribers,
     pending_reminders,
     sync_events,
+    delete_subscriber,
 )
 
 
@@ -74,6 +75,8 @@ async def run_scan() -> None:
                             await send_event_to_subscriber(
                                 bot, delivery.subscriber, delivery.event, delivery
                             )
+                        except BlockedByUserError:
+                            delete_subscriber(session, delivery.subscriber.chat_id)
                         except Exception:
                             logger.exception(
                                 "Failed to send event_id=%s to chat_id=%s",
@@ -104,6 +107,8 @@ async def run_countdown(within_days: int = 3, exclude_source_ids=None) -> None:
                 await send_event_to_subscriber(
                     bot, delivery.subscriber, delivery.event, delivery, is_reminder=True
                 )
+            except BlockedByUserError:
+                delete_subscriber(session, delivery.subscriber.chat_id)
             except Exception:
                 logger.exception(
                     "Failed to send reminder event_id=%s to chat_id=%s",

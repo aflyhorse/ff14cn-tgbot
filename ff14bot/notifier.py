@@ -7,10 +7,15 @@ from telegram import Bot
 from telegram.error import Forbidden
 
 from .models import Event, EventDelivery, Subscriber
-from .database import session_scope
-from .services import mark_sent, delete_subscriber
+from .services import mark_sent
 
 logger = logging.getLogger(__name__)
+
+
+class BlockedByUserError(Exception):
+    """Raised when bot is blocked by a user."""
+
+    pass
 
 
 def build_keyboard(event_id: int, confirmed: bool) -> InlineKeyboardMarkup:
@@ -72,8 +77,7 @@ async def send_event_to_subscriber(
         mark_sent(delivery, reminder=is_reminder)
     except Forbidden:
         logger.warning(
-            "Bot was blocked by user, removing subscriber chat_id=%s",
+            "Bot was blocked by user, will remove subscriber chat_id=%s",
             subscriber.chat_id,
         )
-        with session_scope() as session:
-            delete_subscriber(session, subscriber.chat_id)
+        raise BlockedByUserError(f"Bot blocked by user {subscriber.chat_id}")
