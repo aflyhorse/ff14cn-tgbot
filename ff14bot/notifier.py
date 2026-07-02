@@ -1,11 +1,16 @@
+import logging
 from typing import Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram import Bot
+from telegram.error import Forbidden
 
 from .models import Event, EventDelivery, Subscriber
-from .services import mark_sent
+from .database import session_scope
+from .services import mark_sent, delete_subscriber
+
+logger = logging.getLogger(__name__)
 
 
 def build_keyboard(event_id: int, confirmed: bool) -> InlineKeyboardMarkup:
@@ -49,18 +54,26 @@ async def send_event_to_subscriber(
 ) -> None:
     text = render_event_text(event, is_reminder=is_reminder, tag=tag)
     keyboard = build_keyboard(event.id, delivery.is_confirmed)
-    if event.image_url:
-        await bot.send_photo(
-            chat_id=subscriber.chat_id,
-            photo=event.image_url,
-            caption=text,
-            reply_markup=keyboard,
+    try:
+        if event.image_url:
+            await bot.send_photo(
+                chat_id=subscriber.chat_id,
+                photo=event.image_url,
+                caption=text,
+                reply_markup=keyboard,
+            )
+        else:
+            await bot.send_message(
+                chat_id=subscriber.chat_id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode=ParseMode.HTML,
+            )
+        mark_sent(delivery, reminder=is_reminder)
+    except Forbidden:
+        logger.warning(
+            "Bot was blocked by user, removing subscriber chat_id=%s",
+            subscriber.chat_id,
         )
-    else:
-        await bot.send_message(
-            chat_id=subscriber.chat_id,
-            text=text,
-            reply_markup=keyboard,
-            parse_mode=ParseMode.HTML,
-        )
-    mark_sent(delivery, reminder=is_reminder)
+        with session_scope() as session:
+            delete_subscriber(session, subscriber.chat_id)

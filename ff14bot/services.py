@@ -185,3 +185,12 @@ def mark_confirmed(delivery: EventDelivery, when: Optional[datetime] = None) -> 
 
 def mark_unconfirmed(delivery: EventDelivery) -> None:
     delivery.confirmed_at = None
+
+
+def delete_subscriber(session: Session, chat_id: int) -> None:
+    """Delete a subscriber by chat_id. Used when bot is blocked by user."""
+    subscriber = session.execute(
+        select(Subscriber).where(Subscriber.chat_id == chat_id)
+    ).scalar_one_or_none()
+    if subscriber:
+        session.delete(subscriber)

@@ -70,9 +70,16 @@ async def run_scan() -> None:
                 for event in created:
                     deliveries = ensure_deliveries(session, event, subscribers)
                     for delivery in deliveries:
-                        await send_event_to_subscriber(
-                            bot, delivery.subscriber, delivery.event, delivery
-                        )
+                        try:
+                            await send_event_to_subscriber(
+                                bot, delivery.subscriber, delivery.event, delivery
+                            )
+                        except Exception:
+                            logger.exception(
+                                "Failed to send event_id=%s to chat_id=%s",
+                                delivery.event_id,
+                                delivery.subscriber.chat_id,
+                            )
     # After new event notifications, trigger countdown reminders
     await run_countdown(within_days=3, exclude_source_ids=sorted(suppressed_source_ids))
     logger.info("Scan completed and notifications sent")
@@ -93,9 +100,16 @@ async def run_countdown(within_days: int = 3, exclude_source_ids=None) -> None:
             logger.info("No pending reminders")
             return
         for delivery in deliveries:
-            await send_event_to_subscriber(
-                bot, delivery.subscriber, delivery.event, delivery, is_reminder=True
-            )
+            try:
+                await send_event_to_subscriber(
+                    bot, delivery.subscriber, delivery.event, delivery, is_reminder=True
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to send reminder event_id=%s to chat_id=%s",
+                    delivery.event_id,
+                    delivery.subscriber.chat_id,
+                )
     logger.info("Countdown reminders sent")
 
 
